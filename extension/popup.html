@@ -3,27 +3,68 @@
 <head>
   <title>AI Web Modifier</title>
   <link rel="stylesheet" href="popup.css">
+  <link href="https://fonts.googleapis.com/css2?family=Google+Sans:wght@400;500;700&family=Roboto:wght@300;400;500&display=swap" rel="stylesheet">
 </head>
 <body>
   <div class="container">
-    <h1>AI Web Modifier</h1>
-    <div class="input-section">
-      <textarea id="userPrompt" placeholder="Describe how you want to modify this page..."></textarea>
-      <button id="modifyButton">Modify Page</button>
+    <div class="logo-container">
+      <svg class="logo" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#CF33FF" width="30px" height="30px">
+        <path d="M0 0h24v24H0z" fill="none"/>
+        <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-5 14h-2V9h-2V7h4v10z"/>
+      </svg>
+      <h1>AI Web Modifier</h1>
     </div>
-    <div class="history-section">
-      <h2>Recent Modifications</h2>
-      <ul id="modificationHistory"></ul>
+    
+    <div class="tabs">
+      <button id="modifyTab" class="tab-button active">Modify Page</button>
+      <button id="questionTab" class="tab-button">Ask Question</button>
+      <button id="historyTab" class="tab-button">History</button>
     </div>
-    <div class="debug-section">
+    
+    <div id="modifyPanel" class="panel active">
+      <div class="input-section">
+        <textarea id="userPrompt" placeholder="Describe how you want to modify this page..."></textarea>
+        <button id="modifyButton">Modify Page</button>
+      </div>
+    </div>
+    
+    <div id="questionPanel" class="panel">
+      <div class="input-section">
+        <textarea id="userQuestion" placeholder="Ask a question about this page..."></textarea>
+        <button id="askButton">Ask Question</button>
+      </div>
+      <div id="answerContainer" class="answer-container">
+        <div id="answerText" class="answer-text"></div>
+      </div>
+    </div>
+    
+    <div id="historyPanel" class="panel">
+      <div class="history-section">
+        <h2>Recent Modifications</h2>
+        <ul id="modificationHistory"></ul>
+      </div>
+      <div class="history-section">
+        <h2>Recent Questions</h2>
+        <ul id="questionHistory"></ul>
+      </div>
+    </div>
+    
+    <div id="statusMessage" class="status-message" style="display: none;"></div>
+    
+    <div class="footer">
+      <div class="version-info">
+        Version: 1.0.8
+      </div>
+      <button id="debugToggle" class="small-button">Show Debug</button>
+      <button id="loadEnvButton" class="small-button">Load .env</button>
+    </div>
+    
+    <div id="debugSection" class="debug-section" style="display: none;">
       <h2>Debug Info</h2>
-      <div id="debugOutput" style="max-height: 100px; overflow-y: auto; border: 1px solid #ccc; padding: 5px; margin-top: 5px; font-size: 12px;"></div>
-    </div>
-    <div class="version-info" style="font-size: 10px; color: #999; text-align: right; margin-top: 10px;">
-      Version: 1.0.8
+      <div id="debugOutput"></div>
     </div>
   </div>
   <script src="config.js"></script>
   <script src="popup.js"></script>
 </body>
-</html> 
+</html>
