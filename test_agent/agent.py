@@ -1,9 +1,5 @@
 from google.adk.agents import Agent
-
-# Define a tool with a clear return and no input parameters (if you want it that way)
-def html_page(_: str = "unused") -> str:
-    with open("test_agent/new_page.html", 'r', encoding='utf-8') as infile:
-        return infile.read()
+from google.adk.tools import google_search
 
 # Set up the agent
 root_agent = Agent(
