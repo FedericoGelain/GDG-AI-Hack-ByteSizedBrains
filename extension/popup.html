@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>AI Web Modifier</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="container">
+    <h1>AI Web Modifier</h1>
+    <div class="input-section">
+      <textarea id="userPrompt" placeholder="Describe how you want to modify this page..."></textarea>
+      <button id="modifyButton">Modify Page</button>
+    </div>
+    <div class="history-section">
+      <h2>Recent Modifications</h2>
+      <ul id="modificationHistory"></ul>
+    </div>
+    <div class="debug-section">
+      <h2>Debug Info</h2>
+      <div id="debugOutput" style="max-height: 100px; overflow-y: auto; border: 1px solid #ccc; padding: 5px; margin-top: 5px; font-size: 12px;"></div>
+    </div>
+    <div class="version-info" style="font-size: 10px; color: #999; text-align: right; margin-top: 10px;">
+      Version: 1.0.8
+    </div>
+  </div>
+  <script src="config.js"></script>
+  <script src="popup.js"></script>
+</body>
+</html> 
