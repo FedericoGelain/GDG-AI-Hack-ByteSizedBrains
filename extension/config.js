@@ -49,51 +49,49 @@ async function setApiKey(newKey) {
   }
 }
 
-// Load API key from .env file
-async function loadApiKey() {
+// Load environment variables from .env file
+async function loadEnvFile() {
   try {
-    console.log('Attempting to load API key from .env file');
-    
-    // Try to fetch the .env file
     const response = await fetch(chrome.runtime.getURL('.env'));
-    console.log('.env fetch response status:', response.status);
-    
-    if (!response.ok) {
-      throw new Error(`Failed to load .env file: ${response.status} ${response.statusText}`);
-    }
-    
     const text = await response.text();
-    console.log('.env file content length:', text.length);
     
     // Parse the .env file
-    const lines = text.split('\n');
-    console.log('Number of lines in .env:', lines.length);
-    
-    for (const line of lines) {
-      console.log('Processing line:', line);
-      if (line.trim().startsWith('GEMINI_API_KEY=')) {
-        const apiKey = line.trim().substring('GEMINI_API_KEY='.length);
-        console.log('Found API key in .env file (first 4 chars):', apiKey.substring(0, 4) + '...');
-        
-        // Update the config object with the loaded API key
-        config.API_KEY = apiKey;
-        console.log('API key loaded successfully from .env file');
-        return apiKey;
+    const env = {};
+    text.split('\n').forEach(line => {
+      const match = line.match(/^([^=]+)=(.*)$/);
+      if (match) {
+        const key = match[1].trim();
+        const value = match[2].trim();
+        if (key && value) {
+          env[key] = value;
+        }
       }
-    }
+    });
     
-    console.error('API key not found in .env file');
-    return null;
+    return env;
   } catch (error) {
     console.error('Error loading .env file:', error);
-    return null;
+    return {};
   }
+}
+
+// Load API key from .env file
+async function loadApiKey() {
+  const env = await loadEnvFile();
+  return env.GEMINI_API_KEY || '';
+}
+
+// Load OpenAI API key from .env file
+async function loadOpenAIApiKey() {
+  const env = await loadEnvFile();
+  return env.OPENAI_API_KEY || '';
 }
 
 // Export the functions
 window.getApiKey = getApiKey;
 window.setApiKey = setApiKey;
 window.loadApiKey = loadApiKey;
+window.loadOpenAIApiKey = loadOpenAIApiKey;
 
 // Simple function to get the API key from storage
 window.getApiKey = function() {

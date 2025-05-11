@@ -1,17 +1,137 @@
 // Content script for AI Web Modifier
+console.log('[content.js] SCRIPT LOADED AND RUNNING on:', window.location.href);
 console.log('Content script loaded - version 1.0.9');
+
+// Add speech recognition functionality to content.js
+let speechRecognitionActive = false;
+let mediaRecorder = null;
+let audioChunks = [];
+
+// Function to start speech recognition
+function startSpeechRecognition(callback) {
+  if (speechRecognitionActive) {
+    stopSpeechRecognition();
+    return;
+  }
+  
+  navigator.mediaDevices.getUserMedia({ audio: true })
+    .then(stream => {
+      speechRecognitionActive = true;
+      
+      // Create media recorder
+      mediaRecorder = new MediaRecorder(stream, {
+        mimeType: 'audio/webm;codecs=opus'
+      });
+      
+      // Set up data handler
+      mediaRecorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          audioChunks.push(event.data);
+        }
+      };
+      
+      // Set up stop handler
+      mediaRecorder.onstop = async () => {
+        // Process audio only if we're still active (not manually stopped)
+        if (speechRecognitionActive) {
+          try {
+            const transcript = await processAudioAndGetTranscript();
+            if (callback && typeof callback === 'function') {
+              callback(transcript);
+            }
+          } catch (error) {
+            console.error('Speech recognition error:', error);
+            if (callback && typeof callback === 'function') {
+              callback(null, error);
+            }
+          }
+        }
+        
+        // Clean up
+        stream.getTracks().forEach(track => track.stop());
+        speechRecognitionActive = false;
+      };
+      
+      // Start recording
+      audioChunks = [];
+      mediaRecorder.start(1000); // Collect data every second
+      
+      return true;
+    })
+    .catch(error => {
+      console.error('Error accessing microphone:', error);
+      if (callback && typeof callback === 'function') {
+        callback(null, error);
+      }
+      return false;
+    });
+}
+
+// Function to stop speech recognition
+function stopSpeechRecognition() {
+  if (!speechRecognitionActive || !mediaRecorder) {
+    return;
+  }
+  
+  speechRecognitionActive = false;
+  
+  if (mediaRecorder.state !== 'inactive') {
+    mediaRecorder.stop();
+  }
+}
+
+// Function to process audio and get transcript
+async function processAudioAndGetTranscript() {
+  return new Promise((resolve, reject) => {
+    try {
+      // Create audio blob
+      const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+      
+      if (audioBlob.size === 0) {
+        reject(new Error('No audio recorded'));
+        return;
+      }
+      
+      // Prepare form data for upload
+      const formData = new FormData();
+      formData.append('audio', audioBlob, 'recording.webm');
+      
+      // Send to backend
+      fetch('http://localhost:8000/transcribe', {
+        method: 'POST',
+        body: formData
+      })
+      .then(response => {
+        if (!response.ok) {
+          return response.text().then(text => {
+            throw new Error(`HTTP error! status: ${response.status}, message: ${text}`);
+          });
+        }
+        return response.json();
+      })
+      .then(result => {
+        if (result.error) {
+          reject(new Error(result.error));
+        } else if (result.transcript) {
+          resolve(result.transcript);
+        } else {
+          reject(new Error('No transcript returned from server'));
+        }
+      })
+      .catch(error => {
+        reject(error);
+      });
+    } catch (error) {
+      reject(error);
+    }
+  });
+}
 
 // Listen for messages from the popup
 chrome.runtime.onMessage.addListener(function(request, sender, sendResponse) {
-  console.log('Content script received message:', request);
+  console.log('[content.js] Message received:', request);
   
-  // Respond to ping to confirm content script is loaded
-  if (request.action === 'ping') {
-    console.log('Received ping, sending response');
-    sendResponse({status: 'ready'});
-    return true; // Keep the message channel open for async response
-  }
-  
+  // Handle different actions
   if (request.action === 'modifyPage') {
     console.log('Received modify page request with prompt:', request.prompt);
     modifyPageWithAI(request.prompt, request.apiKey)
@@ -26,9 +146,7 @@ chrome.runtime.onMessage.addListener(function(request, sender, sendResponse) {
         sendResponse({ success: false, error: error.message });
       });
     return true; // Keep the message channel open for async response
-  }
-  
-  if (request.action === 'askQuestion') {
+  } else if (request.action === 'askQuestion') {
     console.log('Received ask question request:', request.question);
     askQuestionAboutPage(request.question, request.apiKey)
       .then(answer => {
@@ -40,7 +158,50 @@ chrome.runtime.onMessage.addListener(function(request, sender, sendResponse) {
         sendResponse({ success: false, error: error.message });
       });
     return true; // Keep the message channel open for async response
+  } else if (request.action === 'requestMicrophonePermission') {
+    console.log('[content.js] Showing microphone permission banner');
+    
+    // Show the permission banner and handle the promise
+    showMicrophonePermissionBanner()
+      .then(() => {
+        console.log('[content.js] Permission banner accepted');
+        sendResponse({ success: true });
+      })
+      .catch(error => {
+        console.log('[content.js] Permission banner rejected:', error);
+        sendResponse({ success: false, error: error.message });
+      });
+    
+    return true; // Keep the message channel open for the async response
+  } else if (request.action === 'startSpeechRecognition') {
+    startSpeechRecognition((transcript, error) => {
+      if (error) {
+        sendResponse({ success: false, error: error.message });
+      } else {
+        sendResponse({ success: true, transcript });
+      }
+    });
+    return true; // Indicates we'll respond asynchronously
+  } else if (request.action === 'stopSpeechRecognition') {
+    stopSpeechRecognition();
+    sendResponse({ success: true });
   }
+  
+  console.log('[content.js] Received message from popup:', request);
+  
+  // Respond to ping to confirm content script is loaded
+  if (request.action === 'ping') {
+    console.log('Received ping, sending response');
+    sendResponse({status: 'ready'});
+    return true; // Keep the message channel open for async response
+  }
+
+  if (request.action === 'injectMicButton') {
+    injectMicButton();
+  }
+  
+  // Return true if we're handling the response asynchronously
+  return true;
 });
 
 // Function to apply the generated HTML to the current page
@@ -336,13 +497,6 @@ function simplifyHtml(html) {
   const scripts = doc.querySelectorAll('script');
   scripts.forEach(script => script.remove());
   
-  // 2. Preserve but extract style tags content
-  const styleContents = [];
-  const styles = doc.querySelectorAll('style');
-  styles.forEach(style => {
-    styleContents.push(style.textContent);
-    style.remove();
-  });
   
   // 3. Remove header elements (common selectors)
   const headerElements = doc.querySelectorAll('header, .header, #header, nav, .nav, #nav');
@@ -355,17 +509,6 @@ function simplifyHtml(html) {
   // 5. Get the simplified HTML
   let simplifiedHtml = doc.documentElement.outerHTML;
   
-  // 6. Add a comment with extracted styles for the model to reference
-  if (styleContents.length > 0) {
-    const styleComment = `
-<!-- 
-Original page styles (for reference):
-${styleContents.join('\n\n')}
--->
-`;
-    // Insert the style comment after the opening <html> tag
-    simplifiedHtml = simplifiedHtml.replace('<html', styleComment + '<html');
-  }
   
   return simplifiedHtml;
 }
@@ -506,3 +649,238 @@ async function answerQuestionWithGeminiAPI(question, apiKey, pageUrl, pageTitle,
     throw error;
   }
 }
+
+// Function to create and show the permission banner
+function showMicrophonePermissionBanner() {
+  console.log('[content.js] Creating microphone permission banner');
+  
+  // Check if banner already exists
+  if (document.getElementById('ai-modifier-permission-banner')) {
+    console.log('[content.js] Banner already exists, removing old one');
+    document.getElementById('ai-modifier-permission-banner').remove();
+  }
+  
+  // Create banner element
+  const banner = document.createElement('div');
+  banner.id = 'ai-modifier-permission-banner';
+  banner.style.cssText = `
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    background-color: #303134;
+    color: #e8eaed;
+    padding: 12px 16px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    z-index: 2147483647;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+    border-bottom: 1px solid #3c4043;
+    font-family: 'Google Sans', Arial, sans-serif;
+    font-size: 14px;
+  `;
+  
+  // Create message
+  const message = document.createElement('span');
+  message.textContent = 'AI Web Modifier needs microphone access for speech recognition';
+  
+  // Create button
+  const button = document.createElement('button');
+  button.textContent = 'Enable Microphone';
+  button.style.cssText = `
+    background-color: #CF33FF;
+    color: white;
+    border: none;
+    padding: 8px 16px;
+    border-radius: 4px;
+    font-family: 'Google Sans', Arial, sans-serif;
+    font-size: 14px;
+    cursor: pointer;
+    margin-left: 16px;
+  `;
+  
+  // Create close button
+  const closeButton = document.createElement('button');
+  closeButton.textContent = '✕';
+  closeButton.style.cssText = `
+    background: none;
+    border: none;
+    color: #9aa0a6;
+    font-size: 16px;
+    cursor: pointer;
+    margin-left: 16px;
+    padding: 4px 8px;
+  `;
+  
+  // Add event listeners
+  button.addEventListener('click', function() {
+    console.log('[content.js] Permission button clicked, requesting microphone');
+    // Request microphone permission
+    navigator.mediaDevices.getUserMedia({ audio: true })
+      .then(function(stream) {
+        console.log('[content.js] Microphone permission granted');
+        // Permission granted
+        stream.getTracks().forEach(track => track.stop()); // Stop the stream
+        banner.remove();
+        
+        // Notify the popup that permission is granted
+        chrome.runtime.sendMessage({ 
+          action: 'microphonePermissionGranted' 
+        });
+      })
+      .catch(function(err) {
+        console.error('[content.js] Microphone permission denied:', err);
+        
+        // Notify the popup that permission is denied
+        chrome.runtime.sendMessage({ 
+          action: 'microphonePermissionDenied',
+          error: err.message
+        });
+      });
+  });
+  
+  closeButton.addEventListener('click', function() {
+    console.log('[content.js] Permission banner closed by user');
+    banner.remove();
+    
+    // Notify the popup that the banner was dismissed
+    chrome.runtime.sendMessage({ 
+      action: 'microphonePermissionDismissed'
+    });
+  });
+  
+  // Assemble and add to page
+  banner.appendChild(message);
+  banner.appendChild(button);
+  banner.appendChild(closeButton);
+  
+  // Make sure we have a body to append to
+  if (document.body) {
+    document.body.appendChild(banner);
+    console.log('[content.js] Banner added to page');
+  } else {
+    console.error('[content.js] Cannot add banner - document.body not available');
+    // Try to add it when the body becomes available
+    document.addEventListener('DOMContentLoaded', () => {
+      document.body.appendChild(banner);
+      console.log('[content.js] Banner added to page after DOMContentLoaded');
+    });
+  }
+  
+  // Return a promise that resolves when permission is granted
+  return new Promise((resolve, reject) => {
+    button.addEventListener('click', function() {
+      navigator.mediaDevices.getUserMedia({ audio: true })
+        .then(function(stream) {
+          stream.getTracks().forEach(track => track.stop());
+          banner.remove();
+          chrome.runtime.sendMessage({ action: 'microphonePermissionGranted' });
+        })
+        .catch(function(err) {
+          chrome.runtime.sendMessage({ 
+            action: 'microphonePermissionDenied',
+            error: err.message
+          });
+        });
+    });
+    
+    closeButton.addEventListener('click', function() {
+      reject(new Error('User dismissed permission banner'));
+    });
+  });
+}
+
+function injectMicButton() {
+  if (document.getElementById('ai-mic-btn')) return;
+  
+  // Create a container for better styling
+  const container = document.createElement('div');
+  container.id = 'ai-mic-permission-container';
+  container.style.position = 'fixed';
+  container.style.top = '0';
+  container.style.left = '0';
+  container.style.width = '100%';
+  container.style.background = '#1976d2';
+  container.style.color = '#fff';
+  container.style.padding = '10px';
+  container.style.zIndex = '2147483647';
+  container.style.textAlign = 'center';
+  container.style.boxShadow = '0 2px 10px rgba(0,0,0,0.2)';
+  
+  // Add text explanation
+  const text = document.createElement('div');
+  text.textContent = 'The AI Web Modifier extension needs microphone access for speech-to-text.';
+  text.style.marginBottom = '10px';
+  text.style.fontSize = '16px';
+  
+  // Create the button
+  const btn = document.createElement('button');
+  btn.id = 'ai-mic-btn';
+  btn.textContent = 'Enable Microphone Access';
+  btn.style.padding = '8px 16px';
+  btn.style.fontSize = '16px';
+  btn.style.fontWeight = 'bold';
+  btn.style.background = '#ffffff';
+  btn.style.color = '#1976d2';
+  btn.style.border = 'none';
+  btn.style.borderRadius = '4px';
+  btn.style.cursor = 'pointer';
+  btn.style.margin = '0 auto';
+  btn.style.display = 'block';
+  
+  // Add hover effect
+  btn.onmouseover = () => {
+    btn.style.background = '#f0f0f0';
+  };
+  btn.onmouseout = () => {
+    btn.style.background = '#ffffff';
+  };
+  
+  // Add click handler
+  btn.onclick = () => {
+    navigator.mediaDevices.getUserMedia({ audio: true })
+      .then(stream => {
+        stream.getTracks().forEach(track => track.stop());
+        
+        // Create success message
+        container.style.background = '#4caf50';
+        text.textContent = 'Microphone access granted! You can now use the speech-to-text feature.';
+        btn.textContent = 'Close This Message';
+        btn.onclick = () => container.remove();
+      })
+      .catch(err => {
+        // Create error message
+        container.style.background = '#f44336';
+        text.textContent = 'Microphone access was denied: ' + err.name;
+        btn.textContent = 'Try Again';
+        btn.onclick = () => {
+          container.remove();
+          injectMicButton();
+        };
+      });
+  };
+  
+  // Assemble and inject
+  container.appendChild(text);
+  container.appendChild(btn);
+  document.body.appendChild(container);
+}
+
+// Listen for permission changes
+navigator.permissions.query({ name: 'microphone' }).then(permissionStatus => {
+  if (permissionStatus.state !== 'granted') {
+    showMicrophonePermissionBanner();
+  }
+  permissionStatus.onchange = () => {
+    if (permissionStatus.state === 'granted') {
+      const banner = document.getElementById('ai-modifier-permission-banner');
+      if (banner) banner.remove();
+      chrome.runtime.sendMessage({ action: 'microphonePermissionGranted' });
+    }
+    if (permissionStatus.state === 'denied') {
+      showMicrophonePermissionBanner();
+      chrome.runtime.sendMessage({ action: 'microphonePermissionDenied' });
+    }
+  };
+});

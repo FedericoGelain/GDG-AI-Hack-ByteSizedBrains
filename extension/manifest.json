@@ -4,12 +4,18 @@
   "version": "1.0.9",
   "description": "Dynamically modify web pages using AI",
   "permissions": [
+    "storage",
     "activeTab",
     "scripting",
-    "storage"
+    "audioCapture",
+    "tabs"
+  ],
+  "optional_permissions": [
+    "microphone"
   ],
   "host_permissions": [
-    "<all_urls>"
+    "<all_urls>",
+    "http://localhost:5000/*"
   ],
   "action": {
     "default_popup": "popup.html",
@@ -29,8 +35,21 @@
   },
   "web_accessible_resources": [
     {
-      "resources": [".env"],
+      "resources": [
+        ".env", 
+        "permission.html", 
+        "permission.js",
+        "test.html",
+        "test.js",
+        "localspeech.js"
+      ],
       "matches": ["<all_urls>"]
+    }
+  ],
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"]
     }
   ]
 } 

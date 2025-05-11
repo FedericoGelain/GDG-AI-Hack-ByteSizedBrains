@@ -2,69 +2,92 @@
 <html>
 <head>
   <title>AI Web Modifier</title>
+  <meta charset="UTF-8">
   <link rel="stylesheet" href="popup.css">
-  <link href="https://fonts.googleapis.com/css2?family=Google+Sans:wght@400;500;700&family=Roboto:wght@300;400;500&display=swap" rel="stylesheet">
 </head>
 <body>
   <div class="container">
     <div class="logo-container">
-      <svg class="logo" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#CF33FF" width="30px" height="30px">
-        <path d="M0 0h24v24H0z" fill="none"/>
-        <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-5 14h-2V9h-2V7h4v10z"/>
-      </svg>
-      <h1>AI Web Modifier</h1>
+      <h1>AIuto</h1>
     </div>
     
     <div class="tabs">
-      <button id="modifyTab" class="tab-button active">Modify Page</button>
-      <button id="questionTab" class="tab-button">Ask Question</button>
-      <button id="historyTab" class="tab-button">History</button>
+      <button class="tab-button active" data-tab="modify">Modify</button>
+      <button class="tab-button" data-tab="ask">Ask</button>
+      <button class="tab-button" data-tab="history">History</button>
     </div>
     
-    <div id="modifyPanel" class="panel active">
+    <div id="modifyTab" class="panel active">
       <div class="input-section">
-        <textarea id="userPrompt" placeholder="Describe how you want to modify this page..."></textarea>
+        <div class="input-with-mic">
+          <textarea id="userPrompt" placeholder="Describe how you want to modify the current web page..."></textarea>
+          <button id="modifyMicButton" class="mic-button">
+            <svg class="mic-icon" viewBox="0 0 24 24" width="24" height="24">
+              <path fill="currentColor" d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/>
+              <path fill="currentColor" d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/>
+            </svg>
+          </button>
+        </div>
         <button id="modifyButton">Modify Page</button>
       </div>
+      
+      <div id="modifyStatusMessage" class="status-message" style="display: none;"></div>
     </div>
     
-    <div id="questionPanel" class="panel">
+    <div id="askTab" class="panel">
       <div class="input-section">
-        <textarea id="userQuestion" placeholder="Ask a question about this page..."></textarea>
-        <button id="askButton">Ask Question</button>
+        <div class="input-with-mic">
+          <textarea id="userQuestion" placeholder="Ask a question about the current web page..."></textarea>
+          <button id="questionMicButton" class="mic-button">
+            <svg class="mic-icon" viewBox="0 0 24 24" width="24" height="24">
+              <path fill="currentColor" d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/>
+              <path fill="currentColor" d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/>
+            </svg>
+          </button>
+        </div>
+        <button id="askButton">Ask</button>
       </div>
-      <div id="answerContainer" class="answer-container">
-        <div id="answerText" class="answer-text"></div>
+      
+      <div class="answer-container" style="display: none;">
+        <div class="answer-text"></div>
       </div>
+      
+      <div id="askStatusMessage" class="status-message" style="display: none;"></div>
     </div>
     
-    <div id="historyPanel" class="panel">
+    <div id="historyTab" class="panel">
       <div class="history-section">
-        <h2>Recent Modifications</h2>
-        <ul id="modificationHistory"></ul>
+        <h2>Recent Prompts</h2>
+        <ul id="promptHistory">
+          <li class="empty-message">No history yet</li>
+        </ul>
       </div>
-      <div class="history-section">
-        <h2>Recent Questions</h2>
-        <ul id="questionHistory"></ul>
-      </div>
+      <div id="historyStatusMessage" class="status-message" style="display: none;"></div>
     </div>
     
-    <div id="statusMessage" class="status-message" style="display: none;"></div>
+    <div id="settingsTab" class="panel">
+      <h2>Speech Recognition Settings</h2>
+      <p>Configure your speech recognition preferences here.</p>
+      <div id="recognitionSystemIndicator" style="margin-top: 10px;">
+        Using: Local Speech Recognition
+      </div>
+    </div>
     
     <div class="footer">
-      <div class="version-info">
-        Version: 1.0.8
-      </div>
-      <button id="debugToggle" class="small-button">Show Debug</button>
-      <button id="loadEnvButton" class="small-button">Load .env</button>
+      <div class="version-info">v1.0.0</div>
+      <a href="https://www.gdgaihack.com/" target="_blank" class="small-button">GDG AI Hack</a>
     </div>
     
-    <div id="debugSection" class="debug-section" style="display: none;">
-      <h2>Debug Info</h2>
-      <div id="debugOutput"></div>
-    </div>
+    <button id="grantMicPermissionButton" class="small-button" style="margin-top: 12px;">
+      Grant Microphone Permission
+    </button>
   </div>
-  <script src="config.js"></script>
+  
+  <div id="permissionBanner" class="permission-banner" style="display: none;">
+    <span>Microphone access is required for speech recognition</span>
+    <button id="permissionButton" class="small-button">Enable Microphone</button>
+  </div>
+  
   <script src="popup.js"></script>
 </body>
 </html>
