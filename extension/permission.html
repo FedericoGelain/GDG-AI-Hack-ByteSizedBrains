@@ -1,10 +1,104 @@
 <!DOCTYPE html>
 <html>
   <head>
-    <title>Request Microphone Permission</title>
+    <title>Microphone Permission</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        text-align: center;
+        margin: 0;
+        padding: 20px;
+        background-color: #f5f5f5;
+      }
+      .container {
+        max-width: 600px;
+        margin: 0 auto;
+        background: white;
+        padding: 30px;
+        border-radius: 8px;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+      }
+      h1 {
+        color: #4285f4;
+      }
+      p {
+        font-size: 16px;
+        line-height: 1.5;
+        color: #333;
+      }
+      button {
+        background-color: #4285f4;
+        color: white;
+        border: none;
+        padding: 12px 24px;
+        font-size: 16px;
+        border-radius: 4px;
+        cursor: pointer;
+        margin-top: 20px;
+      }
+      button:hover {
+        background-color: #3367d6;
+      }
+      .status {
+        margin-top: 20px;
+        padding: 10px;
+        border-radius: 4px;
+      }
+      .success {
+        background-color: #d4edda;
+        color: #155724;
+      }
+      .error {
+        background-color: #f8d7da;
+        color: #721c24;
+      }
+    </style>
   </head>
   <body>
-    <!-- This page requests microphone permission -->
-    <script src="permission.js"></script>
+    <div class="container">
+      <h1>Microphone Permission</h1>
+      <p>This extension needs access to your microphone for speech recognition functionality.</p>
+      <p>Click the button below to grant microphone access.</p>
+      
+      <button id="requestPermission">Enable Microphone</button>
+      
+      <div id="status" class="status" style="display: none;"></div>
+    </div>
+
+    <script>
+      document.getElementById('requestPermission').addEventListener('click', function() {
+        const statusElement = document.getElementById('status');
+        
+        navigator.mediaDevices.getUserMedia({ audio: true })
+          .then(function(stream) {
+            console.log('Microphone permission granted');
+            
+            // Stop all tracks to release the microphone
+            stream.getTracks().forEach(track => track.stop());
+            
+            // Show success message
+            statusElement.textContent = 'Microphone access granted! You can now close this tab and return to using the extension.';
+            statusElement.className = 'status success';
+            statusElement.style.display = 'block';
+            
+            // Notify the extension that permission was granted
+            chrome.runtime.sendMessage({ type: 'PERMISSION_GRANTED' });
+          })
+          .catch(function(error) {
+            console.error('Microphone permission denied:', error);
+            
+            // Show error message
+            statusElement.textContent = 'Microphone access was denied: ' + error.message;
+            statusElement.className = 'status error';
+            statusElement.style.display = 'block';
+            
+            // Notify the extension that permission was denied
+            chrome.runtime.sendMessage({ 
+              type: 'PERMISSION_DENIED', 
+              error: error.message || 'Microphone access denied'
+            });
+          });
+      });
+    </script>
   </body>
 </html> 

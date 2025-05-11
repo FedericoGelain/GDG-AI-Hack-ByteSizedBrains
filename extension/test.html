@@ -1,11 +1,79 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>Microphone Test Page</title>
+  <title>Microphone Permission - AI Web Modifier</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      text-align: center;
+      margin: 0;
+      padding: 20px;
+      background-color: #f5f5f5;
+    }
+    .container {
+      max-width: 600px;
+      margin: 0 auto;
+      background: white;
+      padding: 30px;
+      border-radius: 8px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    }
+    h1 {
+      color: #4285f4;
+    }
+    p {
+      font-size: 16px;
+      line-height: 1.5;
+      color: #333;
+    }
+    button {
+      background-color: #4285f4;
+      color: white;
+      border: none;
+      padding: 12px 24px;
+      font-size: 16px;
+      border-radius: 4px;
+      cursor: pointer;
+      margin-top: 20px;
+    }
+    button:hover {
+      background-color: #3367d6;
+    }
+    .status {
+      margin-top: 20px;
+      padding: 10px;
+      border-radius: 4px;
+    }
+    .success {
+      background-color: #d4edda;
+      color: #155724;
+    }
+    .error {
+      background-color: #f8d7da;
+      color: #721c24;
+    }
+    .extension-info {
+      margin-top: 30px;
+      font-size: 14px;
+      color: #6c757d;
+    }
+  </style>
 </head>
 <body>
-  <h1>Microphone Permission Test Page</h1>
-  <p>This page is for testing microphone permissions with your extension.</p>
+  <div class="container">
+    <h1>Microphone Permission</h1>
+    <p>This extension needs access to your microphone for speech recognition functionality.</p>
+    <p>Click the button below to grant microphone access.</p>
+    
+    <button id="requestMicButton">Enable Microphone</button>
+    
+    <div id="statusMessage" class="status" style="display: none;"></div>
+    
+    <div class="extension-info">
+      <p>AI Web Modifier Extension</p>
+      <p>This page is part of your installed extension and is safe to use.</p>
+    </div>
+  </div>
   <script src="test.js"></script>
 </body>
 </html> 

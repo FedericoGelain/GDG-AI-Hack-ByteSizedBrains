@@ -55,6 +55,8 @@ This guide will help you set up and run the Speech-to-Text agent service.
 - Python 3.7 or higher
 - pip (Python package installer)
 - Google Cloud account with Speech-to-Text API enabled
+- Ffmpeg installed
+- Google Cloud credentials json file
 
 ## Installation Steps
 
@@ -81,7 +83,6 @@ This guide will help you set up and run the Speech-to-Text agent service.
    ```
 
 5. Set up Google Cloud credentials
-   - The `credentials.json` file is already included in the `stt_agent` directory
    - Set the environment variable to point to your credentials file:
      ```bash
      export GOOGLE_APPLICATION_CREDENTIALS="stt_agent/credentials.json"

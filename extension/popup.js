@@ -79,44 +79,26 @@ document.addEventListener('DOMContentLoaded', function() {
   
   // Function to request microphone permission using the permission.html iframe
   function requestMicrophonePermissionViaIframe() {
-    console.log('[popup.js] Requesting microphone permission via iframe');
-    
     return new Promise((resolve, reject) => {
-      // Create an iframe to load the permission.html page
-      const iframe = document.createElement('iframe');
-      iframe.style.display = 'none';
-      iframe.src = chrome.runtime.getURL('permission.html');
+      console.log('[popup.js] Requesting microphone permission');
       
-      // Set up message listener for iframe communication
-      const messageListener = function(event) {
-        console.log('[popup.js] Received message from iframe:', event.data);
-        
-        if (event.data.type === 'PERMISSION_GRANTED') {
-          console.log('[popup.js] Permission granted via iframe');
-          window.removeEventListener('message', messageListener);
-          document.body.removeChild(iframe);
+      // First try to directly request permission
+      navigator.mediaDevices.getUserMedia({ audio: true })
+        .then(stream => {
+          console.log('[popup.js] Permission granted directly');
+          // Stop all tracks to release the microphone
+          stream.getTracks().forEach(track => track.stop());
           resolve();
-        } else if (event.data.type === 'PERMISSION_DENIED') {
-          console.log('[popup.js] Permission denied via iframe');
-          window.removeEventListener('message', messageListener);
-          document.body.removeChild(iframe);
-          reject(new Error(event.data.error || 'Permission denied'));
-        }
-      };
-      
-      window.addEventListener('message', messageListener);
-      
-      // Add iframe to the document
-      document.body.appendChild(iframe);
-      
-      // Set a timeout in case we don't get a response
-      setTimeout(() => {
-        window.removeEventListener('message', messageListener);
-        if (document.body.contains(iframe)) {
-          document.body.removeChild(iframe);
-        }
-        reject(new Error('Permission request timed out'));
-      }, 30000); // 30 second timeout
+        })
+        .catch(error => {
+          console.log('[popup.js] Direct permission failed:', error);
+          
+          // Show a message to the user
+          showStatus('Microphone permission required. Please click "Grant Microphone Permission" button below.', false);
+          
+          // Don't automatically open the permission page, let the user click the button
+          reject(new Error('Microphone permission required. Please use the "Grant Microphone Permission" button.'));
+        });
     });
   }
   
@@ -266,6 +248,15 @@ document.addEventListener('DOMContentLoaded', function() {
       window.currentTextarea = textarea;
       window.currentMicButton = modifyMicButton;
       
+      // If already recording or processing, stop
+      if (modifyMicButton.classList.contains('listening') || 
+          modifyMicButton.classList.contains('processing')) {
+        if (speechManager) {
+          speechManager.stop();
+        }
+        return;
+      }
+      
       // Request microphone permission through iframe
       requestMicrophonePermissionViaIframe()
         .then(() => {
@@ -291,6 +282,15 @@ document.addEventListener('DOMContentLoaded', function() {
       const textarea = document.getElementById('userQuestion');
       window.currentTextarea = textarea;
       window.currentMicButton = questionMicButton;
+      
+      // If already recording or processing, stop
+      if (questionMicButton.classList.contains('listening') || 
+          questionMicButton.classList.contains('processing')) {
+        if (speechManager) {
+          speechManager.stop();
+        }
+        return;
+      }
       
       // Request microphone permission through iframe
       requestMicrophonePermissionViaIframe()
@@ -492,12 +492,138 @@ document.addEventListener('DOMContentLoaded', function() {
       showStatus('Microphone access is required for speech recognition', false, tabId);
     }
   });
+
+  // Set up the permission button
+  const grantMicPermissionButton = document.getElementById('grantMicPermissionButton');
+  if (grantMicPermissionButton) {
+    grantMicPermissionButton.addEventListener('click', function() {
+      console.log('[popup.js] Grant microphone permission button clicked');
+      
+      try {
+        // Try to open the permission page via background script
+        chrome.runtime.sendMessage({ action: 'openPermissionPage' });
+        
+        // As a fallback, also try to open it directly
+        const permissionUrl = chrome.runtime.getURL('test.html');
+        chrome.tabs.create({ url: permissionUrl });
+      } catch (error) {
+        console.error('[popup.js] Error opening permission page:', error);
+      }
+      
+      // Close the popup
+      setTimeout(() => {
+        window.close();
+      }, 100);
+    });
+  }
+
+  // Set up keyboard shortcut for speech recognition
+  function setupKeyboardShortcuts() {
+    console.log('[popup.js] Setting up keyboard shortcuts');
+    
+    // Track if the F key is currently pressed
+    let fKeyPressed = false;
+    
+    // Function to determine which textarea and mic button to use based on active tab
+    function getCurrentControls() {
+      const activeTab = document.querySelector('.panel.active');
+      if (!activeTab) return null;
+      
+      if (activeTab.id === 'modifyTab') {
+        return {
+          textarea: document.getElementById('userPrompt'),
+          micButton: document.getElementById('modifyMicButton')
+        };
+      } else if (activeTab.id === 'askTab') {
+        return {
+          textarea: document.getElementById('userQuestion'),
+          micButton: document.getElementById('questionMicButton')
+        };
+      }
+      
+      return null;
+    }
+    
+    // Handle keydown event (when key is pressed)
+    document.addEventListener('keydown', function(event) {
+      // Check if F key is pressed and not already recording
+      if (event.key.toLowerCase() === 'f' && !fKeyPressed) {
+        console.log('[popup.js] F key pressed');
+        fKeyPressed = true;
+        
+        // Get the current controls based on active tab
+        const controls = getCurrentControls();
+        if (!controls) return;
+        
+        // Set global variables for current textarea and mic button
+        window.currentTextarea = controls.textarea;
+        window.currentMicButton = controls.micButton;
+        
+        // Start recording if not already recording
+        if (!controls.micButton.classList.contains('listening') && 
+            !controls.micButton.classList.contains('processing')) {
+          
+          // Request microphone permission and start recording
+          requestMicrophonePermissionViaIframe()
+            .then(() => {
+              console.log('[popup.js] Permission granted, starting speech recognition');
+              if (speechManager) {
+                speechManager.start(controls.textarea, controls.micButton);
+              }
+            })
+            .catch(error => {
+              console.error('[popup.js] Permission error:', error);
+              const tabId = controls.textarea.id === 'userPrompt' ? 'modify' : 'ask';
+              showStatus(`Microphone permission required: ${error.message}`, false, tabId);
+            });
+        }
+      }
+    });
+    
+    // Handle keyup event (when key is released)
+    document.addEventListener('keyup', function(event) {
+      // Check if F key is released and we were recording
+      if (event.key.toLowerCase() === 'f' && fKeyPressed) {
+        console.log('[popup.js] F key released');
+        fKeyPressed = false;
+        
+        // Get the current controls
+        const controls = getCurrentControls();
+        if (!controls) return;
+        
+        // Stop recording if we were recording
+        if (controls.micButton.classList.contains('listening')) {
+          if (speechManager) {
+            speechManager.stop();
+          }
+        }
+      }
+    });
+    
+    // Handle tab/window blur to stop recording if user switches away
+    window.addEventListener('blur', function() {
+      if (fKeyPressed) {
+        console.log('[popup.js] Window lost focus, stopping recording');
+        fKeyPressed = false;
+        
+        if (window.currentMicButton && window.currentMicButton.classList.contains('listening')) {
+          if (speechManager) {
+            speechManager.stop();
+          }
+        }
+      }
+    });
+  }
+
+  // Call the setup function
+  setupKeyboardShortcuts();
 });
 
 // Function to handle API key management
 function setupApiKeyManager() {
   const geminiKeyInput = document.getElementById('geminiApiKey');
   const saveGeminiButton = document.getElementById('saveGeminiKey');
+  const testApiKeyButton = document.createElement('button');
   
   if (!geminiKeyInput || !saveGeminiButton) return;
   
@@ -516,8 +642,268 @@ function setupApiKeyManager() {
       return;
     }
     
+    // Validate the API key format
+    if (!apiKey.startsWith('AIza')) {
+      showStatus('Invalid API key format. Gemini API keys should start with "AIza"', false, 'settings');
+      return;
+    }
+    
+    // Save to both local and sync storage for better compatibility
     chrome.storage.local.set({ geminiApiKey: apiKey }, function() {
-      showStatus('Gemini API key saved successfully', false, 'settings');
+      chrome.storage.sync.set({ geminiApiKey: apiKey }, function() {
+        showStatus('Gemini API key saved successfully', false, 'settings');
+        
+        // Test the API key
+        testApiKey(apiKey);
+      });
     });
   });
+  
+  // Function to test if the API key is valid
+  function testApiKey(apiKey) {
+    // Try Gemini 2.0 first
+    const testEndpoint = `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-pro:generateContent?key=${apiKey}`;
+    const testPayload = {
+      contents: [
+        {
+          parts: [
+            {
+              text: "Hello, please respond with just the word 'valid' to confirm this API key works."
+            }
+          ]
+        }
+      ],
+      generationConfig: {
+        temperature: 0.1,
+        maxOutputTokens: 10
+      }
+    };
+    
+    fetch(testEndpoint, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(testPayload)
+    })
+    .then(response => {
+      if (!response.ok) {
+        return response.text().then(text => {
+          throw new Error(`API test failed: ${text}`);
+        });
+      }
+      return response.json();
+    })
+    .then(data => {
+      showStatus('Gemini 2.0 API key verified successfully!', false, 'settings');
+      // Save the working model version
+      chrome.storage.local.set({ 
+        geminiModel: 'gemini-1.5-pro', 
+        geminiVersion: 'v1',
+        workingApiKey: apiKey
+      });
+    })
+    .catch(error => {
+      console.error('Gemini 2.0 API test failed:', error);
+      
+      // Try Gemini 1.0 Pro
+      tryGemini1Pro(apiKey);
+    });
+  }
+  
+  // Try Gemini 1.0 Pro if 2.0 fails
+  function tryGemini1Pro(apiKey) {
+    const endpoint = `https://generativelanguage.googleapis.com/v1/models/gemini-1.0-pro:generateContent?key=${apiKey}`;
+    const testPayload = {
+      contents: [
+        {
+          parts: [
+            {
+              text: "Hello, please respond with just the word 'valid' to confirm this API key works."
+            }
+          ]
+        }
+      ],
+      generationConfig: {
+        temperature: 0.1,
+        maxOutputTokens: 10
+      }
+    };
+    
+    fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(testPayload)
+    })
+    .then(response => {
+      if (!response.ok) {
+        return response.text().then(text => {
+          throw new Error(`API test failed: ${text}`);
+        });
+      }
+      return response.json();
+    })
+    .then(data => {
+      showStatus('Gemini 1.0 Pro API key verified successfully!', false, 'settings');
+      // Save the working model version
+      chrome.storage.local.set({ 
+        geminiModel: 'gemini-1.0-pro', 
+        geminiVersion: 'v1',
+        workingApiKey: apiKey
+      });
+    })
+    .catch(error => {
+      console.error('Gemini 1.0 Pro test failed:', error);
+      
+      // Try original Gemini Pro
+      tryOriginalGeminiPro(apiKey);
+    });
+  }
+  
+  // Try original Gemini Pro if others fail
+  function tryOriginalGeminiPro(apiKey) {
+    const endpoint = `https://generativelanguage.googleapis.com/v1/models/gemini-pro:generateContent?key=${apiKey}`;
+    const testPayload = {
+      contents: [
+        {
+          parts: [
+            {
+              text: "Hello, please respond with just the word 'valid' to confirm this API key works."
+            }
+          ]
+        }
+      ],
+      generationConfig: {
+        temperature: 0.1,
+        maxOutputTokens: 10
+      }
+    };
+    
+    fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(testPayload)
+    })
+    .then(response => {
+      if (!response.ok) {
+        return response.text().then(text => {
+          throw new Error(`API test failed: ${text}`);
+        });
+      }
+      return response.json();
+    })
+    .then(data => {
+      showStatus('Gemini Pro API key verified successfully!', false, 'settings');
+      // Save the working model version
+      chrome.storage.local.set({ 
+        geminiModel: 'gemini-pro', 
+        geminiVersion: 'v1',
+        workingApiKey: apiKey
+      });
+    })
+    .catch(error => {
+      console.error('Gemini Pro test failed:', error);
+      
+      // Try beta version as last resort
+      tryBetaVersion(apiKey);
+    });
+  }
+  
+  // Try beta version as last resort
+  function tryBetaVersion(apiKey) {
+    const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${apiKey}`;
+    const testPayload = {
+      contents: [
+        {
+          parts: [
+            {
+              text: "Hello, please respond with just the word 'valid' to confirm this API key works."
+            }
+          ]
+        }
+      ],
+      generationConfig: {
+        temperature: 0.1,
+        maxOutputTokens: 10
+      }
+    };
+    
+    fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(testPayload)
+    })
+    .then(response => {
+      if (!response.ok) {
+        return response.text().then(text => {
+          throw new Error(`API test failed: ${text}`);
+        });
+      }
+      return response.json();
+    })
+    .then(data => {
+      showStatus('Beta API key verified successfully!', false, 'settings');
+      // Save the working model version
+      chrome.storage.local.set({ 
+        geminiModel: 'gemini-pro', 
+        geminiVersion: 'v1beta',
+        workingApiKey: apiKey
+      });
+    })
+    .catch(error => {
+      console.error('All API tests failed:', error);
+      showStatus('API key verification failed. Please check your API key and make sure Gemini API is enabled in your Google Cloud Console.', false, 'settings');
+    });
+  }
+
+  testApiKeyButton.textContent = 'Test API Key';
+  testApiKeyButton.className = 'settings-button';
+  testApiKeyButton.style.marginTop = '10px';
+  testApiKeyButton.addEventListener('click', function() {
+    const apiKey = geminiKeyInput.value.trim();
+    if (!apiKey) {
+      showStatus('Please enter a Gemini API key', false, 'settings');
+      return;
+    }
+    
+    showStatus('Testing API key...', false, 'settings');
+    
+    // Send a message to the content script to test the API key
+    chrome.tabs.query({ active: true, currentWindow: true }, function(tabs) {
+      if (tabs && tabs[0]) {
+        chrome.tabs.sendMessage(tabs[0].id, { 
+          action: 'testApiKey', 
+          apiKey: apiKey 
+        }, function(response) {
+          if (chrome.runtime.lastError) {
+            console.error('Error sending message:', chrome.runtime.lastError);
+            showStatus(`Error: ${chrome.runtime.lastError.message}`, false, 'settings');
+            return;
+          }
+          
+          if (response && response.success) {
+            showStatus(`API key works with ${response.model} (${response.version})!`, false, 'settings');
+          } else if (response && response.error) {
+            showStatus(`API key test failed: ${response.error}`, false, 'settings');
+          } else {
+            showStatus('No response from the page. Please try again.', false, 'settings');
+          }
+        });
+      } else {
+        showStatus('No active tab found', false, 'settings');
+      }
+    });
+  });
+
+  // Add the button to the settings section
+  const apiKeySection = document.querySelector('.api-key-section');
+  if (apiKeySection) {
+    apiKeySection.appendChild(testApiKeyButton);
+  }
 } 

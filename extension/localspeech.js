@@ -108,16 +108,23 @@ class LocalSpeechRecognitionManager {
       this.mediaRecorder.onstop = async () => {
         console.log('MediaRecorder stopped, chunks collected:', this.audioChunks.length);
         
+        // Change from recording to processing state
+        if (this.currentButton) {
+          this.currentButton.classList.remove('listening');
+          this.currentButton.classList.add('processing');
+        }
+        
+        this.showStatus('Processing audio...');
+        
         await this.processAudio();
         this.isRecording = false;
-        
         
         // Clean up
         stream.getTracks().forEach(track => track.stop());
         
         // Update UI
         if (this.currentButton) {
-          this.currentButton.classList.remove('listening');
+          this.currentButton.classList.remove('processing');
         }
       };
       
@@ -144,29 +151,29 @@ class LocalSpeechRecognitionManager {
     try {
       this.showStatus('Processing audio...');
       
-      // Create audio blob - use the same MIME type as recorder.js
+      // Create audio blob
       const audioBlob = new Blob(this.audioChunks, { type: 'audio/webm' });
       console.log('Audio blob created, size:', audioBlob.size, 'bytes');
       
       if (audioBlob.size === 0) {
         this.showStatus('No audio recorded');
+        if (this.currentButton) {
+          this.currentButton.classList.remove('processing');
+        }
         return;
       }
       
-      // Prepare form data for upload - match the format in recorder.js
+      // Prepare form data for upload
       const formData = new FormData();
       formData.append('audio', audioBlob, 'recording.webm');
       
-      // Send to backend - use the same approach as recorder.js
+      // Send to backend
       console.log('Sending audio to server:', this.apiEndpoint);
       this.showStatus('Sending audio to server...');
       
-      // Use XMLHttpRequest instead of fetch (like recorder.js might be doing)
       return new Promise((resolve, reject) => {
         const xhr = new XMLHttpRequest();
         xhr.open('POST', this.apiEndpoint, true);
-        
-        // Don't set any custom headers that might trigger CORS preflight
         
         xhr.onload = () => {
           if (xhr.status >= 200 && xhr.status < 300) {
@@ -176,6 +183,9 @@ class LocalSpeechRecognitionManager {
               
               if (result.error) {
                 this.showStatus(`Server Error: ${result.error}`);
+                if (this.currentButton) {
+                  this.currentButton.classList.remove('processing');
+                }
                 reject(new Error(result.error));
               } else if (result.transcript) {
                 // Add transcript to textarea
@@ -189,20 +199,47 @@ class LocalSpeechRecognitionManager {
                   this.currentTextarea.focus();
                   this.currentTextarea.selectionStart = this.currentTextarea.value.length;
                   this.currentTextarea.selectionEnd = this.currentTextarea.value.length;
+                  
+                  // Auto-submit after a short delay
+                  setTimeout(() => {
+                    // Click the appropriate action button based on which textarea we're using
+                    if (this.currentTextarea.id === 'userPrompt') {
+                      const submitButton = document.getElementById('modifyButton');
+                      if (submitButton) submitButton.click();
+                    } else if (this.currentTextarea.id === 'userQuestion') {
+                      const submitButton = document.getElementById('askButton');
+                      if (submitButton) submitButton.click();
+                    }
+                  }, 500); // Half-second delay to let user see what was transcribed
                 }
-                this.showStatus('Transcription complete', true);
+                
+                // Remove processing state
+                if (this.currentButton) {
+                  this.currentButton.classList.remove('processing');
+                }
+                
+                this.showStatus('Transcription complete', false); // Don't show submit button since we're auto-submitting
                 resolve(result);
               } else {
+                if (this.currentButton) {
+                  this.currentButton.classList.remove('processing');
+                }
                 this.showStatus('No transcript returned from server');
                 reject(new Error('No transcript returned'));
               }
             } catch (e) {
               console.error('Error parsing response:', e);
+              if (this.currentButton) {
+                this.currentButton.classList.remove('processing');
+              }
               this.showStatus('Error parsing response: ' + e.message);
               reject(e);
             }
           } else {
             console.error('XHR error:', xhr.status, xhr.statusText);
+            if (this.currentButton) {
+              this.currentButton.classList.remove('processing');
+            }
             this.showStatus(`Server error: ${xhr.status} ${xhr.statusText}`);
             reject(new Error(`XHR error: ${xhr.status} ${xhr.statusText}`));
           }
@@ -210,6 +247,9 @@ class LocalSpeechRecognitionManager {
         
         xhr.onerror = (e) => {
           console.error('Network error:', e);
+          if (this.currentButton) {
+            this.currentButton.classList.remove('processing');
+          }
           this.showStatus('Network error connecting to server');
           reject(new Error('Network error'));
         };
@@ -226,6 +266,9 @@ class LocalSpeechRecognitionManager {
       });
     } catch (error) {
       console.error('Error processing audio:', error);
+      if (this.currentButton) {
+        this.currentButton.classList.remove('processing');
+      }
       this.showStatus('Error processing audio: ' + error.message);
     }
   }
@@ -249,12 +292,19 @@ class LocalSpeechRecognitionManager {
         console.log('MediaRecorder stopped successfully');
       } catch (e) {
         console.error('Error stopping MediaRecorder:', e);
+        
+        // Make sure we clean up the UI even if there's an error
+        if (this.currentButton) {
+          this.currentButton.classList.remove('listening');
+          this.currentButton.classList.remove('processing');
+        }
       }
     } else {
       console.log('MediaRecorder not active, just updating UI');
       // If mediaRecorder is not active, still update UI
       if (this.currentButton) {
         this.currentButton.classList.remove('listening');
+        this.currentButton.classList.remove('processing');
       }
     }
   }

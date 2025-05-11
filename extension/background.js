@@ -9,17 +9,40 @@ chrome.runtime.onMessage.addListener(function(request, sender, sendResponse) {
   console.log('Background received message:', request, 'from sender:', sender);
   
   if (request.action === 'getApiKey') {
-    chrome.storage.local.get('geminiApiKey', function(result) {
-      sendResponse(result.geminiApiKey || '');
+    // Try to get the working API key first
+    chrome.storage.local.get(['workingApiKey', 'geminiApiKey'], function(result) {
+      if (result.workingApiKey) {
+        sendResponse(result.workingApiKey);
+      } else if (result.geminiApiKey) {
+        sendResponse(result.geminiApiKey);
+      } else {
+        // Try sync storage as fallback
+        chrome.storage.sync.get('geminiApiKey', function(syncResult) {
+          sendResponse(syncResult.geminiApiKey || '');
+        });
+      }
     });
     return true; // Keep the message channel open for async response
   }
   
   if (request.action === 'getApiKeys') {
-    chrome.storage.local.get(['geminiApiKey'], function(result) {
-      sendResponse({
-        geminiApiKey: result.geminiApiKey || ''
-      });
+    // Try to get from both local and sync storage
+    chrome.storage.local.get(['geminiApiKey', 'workingApiKey', 'geminiModel', 'geminiVersion'], function(localResult) {
+      const response = {
+        geminiApiKey: localResult.workingApiKey || localResult.geminiApiKey || '',
+        geminiModel: localResult.geminiModel || 'gemini-1.5-pro',
+        geminiVersion: localResult.geminiVersion || 'v1'
+      };
+      
+      if (response.geminiApiKey) {
+        sendResponse(response);
+      } else {
+        // If not in local storage, try sync storage
+        chrome.storage.sync.get(['geminiApiKey'], function(syncResult) {
+          response.geminiApiKey = syncResult.geminiApiKey || '';
+          sendResponse(response);
+        });
+      }
     });
     return true; // Keep the message channel open for async response
   }
@@ -27,7 +50,6 @@ chrome.runtime.onMessage.addListener(function(request, sender, sendResponse) {
   if (request.action === 'logDebug') {
     console.log('Debug:', request.message);
     sendResponse({success: true});
-    // return true; // Not async, not strictly needed but fine
   }
 
   // This was for a direct speech result from a different approach, might not be used with iframe
@@ -39,19 +61,26 @@ chrome.runtime.onMessage.addListener(function(request, sender, sendResponse) {
   // Forward permission messages from content script (or iframe via content script) to popup
   if (request.type === 'PERMISSION_GRANTED' || request.type === 'PERMISSION_DENIED') {
     console.log('[background.js] Forwarding permission status to popup:', request.type);
-    // Check if the sender is the content script (optional, but good for clarity)
-    // if (sender.tab) { // Messages from content scripts have sender.tab
-        chrome.runtime.sendMessage(request); // Forwards to all parts of the extension, popup will pick it up
-    // }
+    chrome.runtime.sendMessage(request);
   }
   
   if (request.action === 'logError') {
     console.error('Extension error:', request.error);
     sendResponse({logged: true});
-    // return true; // Not async
   }
-  // If you're not sending an async response for all paths, you don't always need to return true.
-  // Only return true if you intend to call sendResponse later.
+  
+  // New handler for opening the permission page
+  if (request.action === 'openPermissionPage') {
+    console.log('[background.js] Opening permission page');
+    // Create a new tab with the permission page
+    chrome.tabs.create({
+      url: chrome.runtime.getURL('test.html')
+    }, function(tab) {
+      console.log('[background.js] Permission page opened in tab:', tab.id);
+      sendResponse({success: true, tabId: tab.id});
+    });
+    return true; // Keep the message channel open for async response
+  }
 });
 
 // When extension is installed or updated

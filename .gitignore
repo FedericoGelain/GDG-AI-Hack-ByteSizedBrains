@@ -8,3 +8,9 @@ credentials.json
 */.venv
 stt_agent/.venv/*
 stt_agent/venv311/*
+stt_agent/venv313/*
+stt_agent/.venv/pyvenv.cfg
+stt_agent/.venv/pyvenv.cfg
+stt_agent/.venv/bin/python
+stt_agent/.venv/bin/python3
+stt_agent/.venv/bin/python3.10
