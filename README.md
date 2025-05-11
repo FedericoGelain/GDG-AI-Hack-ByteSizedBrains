@@ -1,4 +1,4 @@
-# AI Web Modifier - Chrome Extension
+# AIuto - Chrome Extension
 
 This Chrome extension allows you to modify web pages using AI. Simply describe how you want to change the page, and the extension will generate a new version of the page based on your request.
 
