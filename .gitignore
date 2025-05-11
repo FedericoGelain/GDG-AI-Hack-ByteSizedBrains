@@ -5,3 +5,6 @@
 __pycache__/*
 _*
 credentials.json
+*/.venv
+stt_agent/.venv/*
+stt_agent/venv311/*

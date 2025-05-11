@@ -9,8 +9,17 @@ chrome.runtime.onMessage.addListener(function(request, sender, sendResponse) {
   console.log('Background received message:', request, 'from sender:', sender);
   
   if (request.action === 'getApiKey') {
-    chrome.storage.sync.get('apiKey', function(result) {
-      sendResponse(result.apiKey || '');
+    chrome.storage.local.get('geminiApiKey', function(result) {
+      sendResponse(result.geminiApiKey || '');
+    });
+    return true; // Keep the message channel open for async response
+  }
+  
+  if (request.action === 'getApiKeys') {
+    chrome.storage.local.get(['geminiApiKey'], function(result) {
+      sendResponse({
+        geminiApiKey: result.geminiApiKey || ''
+      });
     });
     return true; // Keep the message channel open for async response
   }

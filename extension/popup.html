@@ -15,6 +15,7 @@
       <button class="tab-button active" data-tab="modify">Modify</button>
       <button class="tab-button" data-tab="ask">Ask</button>
       <button class="tab-button" data-tab="history">History</button>
+      <button class="tab-button" data-tab="settings">Settings</button>
     </div>
     
     <div id="modifyTab" class="panel active">
@@ -66,11 +67,27 @@
     </div>
     
     <div id="settingsTab" class="panel">
-      <h2>Speech Recognition Settings</h2>
-      <p>Configure your speech recognition preferences here.</p>
-      <div id="recognitionSystemIndicator" style="margin-top: 10px;">
-        Using: Local Speech Recognition
+      <h2>Settings</h2>
+      
+      <div class="settings-section">
+        <h3>API Configuration</h3>
+        <div class="api-key-section">
+          <div class="settings-row">
+            <label for="geminiApiKey">Gemini API Key:</label>
+            <input type="password" id="geminiApiKey" placeholder="AIza..." />
+            <button id="saveGeminiKey" class="small-button">Save</button>
+          </div>
+        </div>
       </div>
+      
+      <div class="settings-section">
+        <h3>Speech Recognition</h3>
+        <div id="recognitionSystemIndicator" class="settings-status">
+          Using: Local Speech Recognition
+        </div>
+      </div>
+      
+      <div id="settingsStatusMessage" class="status-message" style="display: none;"></div>
     </div>
     
     <div class="footer">

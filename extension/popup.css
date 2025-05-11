@@ -459,4 +459,79 @@ button.loading::after {
 .permission-banner button:focus-visible {
   background: #B026CC;
   transform: translateY(-2px);
+}
+
+/* Settings styles */
+.settings-section {
+  background-color: #2A2A2A;
+  border-radius: 12px;
+  padding: 16px;
+  margin-bottom: 16px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+.settings-section h3 {
+  font-size: 16px;
+  font-weight: 600;
+  margin: 0 0 16px 0;
+  color: #F3F4F6;
+}
+
+.settings-row {
+  display: flex;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.settings-button {
+  width: 100%;
+  margin-bottom: 12px;
+}
+
+.settings-status {
+  font-size: 14px;
+  color: #B0B3B8;
+  margin: 8px 0;
+}
+
+.api-key-section {
+  margin-top: 16px;
+}
+
+.api-key-section label {
+  display: block;
+  margin-bottom: 8px;
+  font-size: 14px;
+  color: #F3F4F6;
+  width: 140px;
+}
+
+.api-key-section input {
+  flex: 1;
+  padding: 10px 12px;
+  border: none;
+  border-radius: 8px;
+  background-color: #1E1E1E;
+  color: #F3F4F6;
+  font-family: 'Roboto', Arial, sans-serif;
+  font-size: 14px;
+  margin-right: 8px;
+}
+
+.api-key-section input:focus-visible {
+  box-shadow: 0 0 0 2px rgba(207, 51, 255, 0.5);
+  outline: none;
+}
+
+.api-key-section .small-button {
+  padding: 8px 12px;
+  font-size: 12px;
+}
+
+.success-message {
+  color: #00E58E;
+}
+
+.error-message {
+  color: #ff5252;
 } 

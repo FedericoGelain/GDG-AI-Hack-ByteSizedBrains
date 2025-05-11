@@ -4,6 +4,49 @@ window.onerror = function(message, source, lineno, colno, error) {
   return true;
 };
 
+// Define showStatus function globally so it can be used anywhere
+function showStatus(message, showSubmitButton = false, tabId = 'modify') {
+  const statusElement = document.getElementById(`${tabId}StatusMessage`);
+  if (!statusElement) {
+    console.error(`Status element for ${tabId} not found`);
+    return;
+  }
+  
+  // Clear previous content
+  statusElement.innerHTML = '';
+  
+  // Add message
+  const messageElement = document.createElement('span');
+  messageElement.textContent = message;
+  statusElement.appendChild(messageElement);
+  
+  // Add submit button if requested
+  if (showSubmitButton && window.currentTextarea) {
+    const submitButton = document.createElement('button');
+    submitButton.textContent = 'Submit';
+    submitButton.className = 'small-button submit-button';
+    submitButton.addEventListener('click', () => {
+      // Click the appropriate action button
+      if (window.currentTextarea.id === 'userPrompt') {
+        document.getElementById('modifyButton').click();
+      } else if (window.currentTextarea.id === 'userQuestion') {
+        document.getElementById('askButton').click();
+      }
+    });
+    
+    statusElement.appendChild(submitButton);
+  }
+  
+  statusElement.style.display = 'flex';
+}
+
+function hideStatus(tabId = 'modify') {
+  const statusElement = document.getElementById(`${tabId}StatusMessage`);
+  if (statusElement) {
+    statusElement.style.display = 'none';
+  }
+}
+
 document.addEventListener('DOMContentLoaded', function() {
   console.log('Popup loaded');
   
@@ -13,48 +56,15 @@ document.addEventListener('DOMContentLoaded', function() {
   // Load prompt history
   loadPromptHistory();
   
-  // Define showStatus function at the top
-  function showStatus(message, showSubmitButton = false, tabId = 'modify') {
-    const statusElement = document.getElementById(`${tabId}StatusMessage`);
-    if (!statusElement) {
-      console.error(`Status element for ${tabId} not found`);
-      return;
-    }
-    
-    // Clear previous content
-    statusElement.innerHTML = '';
-    
-    // Add message
-    const messageElement = document.createElement('span');
-    messageElement.textContent = message;
-    statusElement.appendChild(messageElement);
-    
-    // Add submit button if requested
-    if (showSubmitButton && currentTextarea) {
-      const submitButton = document.createElement('button');
-      submitButton.textContent = 'Submit';
-      submitButton.className = 'small-button submit-button';
-      submitButton.addEventListener('click', () => {
-        // Click the appropriate action button
-        if (currentTextarea.id === 'userPrompt') {
-          document.getElementById('modifyButton').click();
-        } else if (currentTextarea.id === 'userQuestion') {
-          document.getElementById('askButton').click();
-        }
-      });
-      
-      statusElement.appendChild(submitButton);
-    }
-    
-    statusElement.style.display = 'flex';
-  }
+  // Set up API key management
+  setupApiKeyManager();
   
-  function hideStatus(tabId = 'modify') {
-    const statusElement = document.getElementById(`${tabId}StatusMessage`);
-    if (statusElement) {
-      statusElement.style.display = 'none';
-    }
-  }
+  // Set up the Ask button
+  setupAskButton();
+  
+  // Track current mic button and textarea globally
+  window.currentMicButton = null;
+  window.currentTextarea = null;
   
   // Function to set loading state on a button
   function setButtonLoading(button, isLoading) {
@@ -66,10 +76,6 @@ document.addEventListener('DOMContentLoaded', function() {
       button.disabled = false;
     }
   }
-  
-  // Track current mic button and textarea
-  let currentMicButton = null;
-  let currentTextarea = null;
   
   // Function to request microphone permission using the permission.html iframe
   function requestMicrophonePermissionViaIframe() {
@@ -257,8 +263,8 @@ document.addEventListener('DOMContentLoaded', function() {
     modifyMicButton.addEventListener('click', function() {
       console.log('[popup.js] Modify mic button clicked');
       const textarea = document.getElementById('userPrompt');
-      currentTextarea = textarea;
-      currentMicButton = modifyMicButton;
+      window.currentTextarea = textarea;
+      window.currentMicButton = modifyMicButton;
       
       // Request microphone permission through iframe
       requestMicrophonePermissionViaIframe()
@@ -274,8 +280,8 @@ document.addEventListener('DOMContentLoaded', function() {
         .catch(error => {
           console.error('[popup.js] Permission error:', error);
           showStatus(`Microphone permission required: ${error.message}`, false, 'modify');
-          if (currentMicButton) {
-            currentMicButton.classList.add('permission-denied');
+          if (window.currentMicButton) {
+            window.currentMicButton.classList.add('permission-denied');
           }
         });
     });
@@ -283,8 +289,8 @@ document.addEventListener('DOMContentLoaded', function() {
     questionMicButton.addEventListener('click', function() {
       console.log('[popup.js] Question mic button clicked');
       const textarea = document.getElementById('userQuestion');
-      currentTextarea = textarea;
-      currentMicButton = questionMicButton;
+      window.currentTextarea = textarea;
+      window.currentMicButton = questionMicButton;
       
       // Request microphone permission through iframe
       requestMicrophonePermissionViaIframe()
@@ -300,8 +306,8 @@ document.addEventListener('DOMContentLoaded', function() {
         .catch(error => {
           console.error('[popup.js] Permission error:', error);
           showStatus(`Microphone permission required: ${error.message}`, false, 'ask');
-          if (currentMicButton) {
-            currentMicButton.classList.add('permission-denied');
+          if (window.currentMicButton) {
+            window.currentMicButton.classList.add('permission-denied');
           }
         });
     });
@@ -356,90 +362,106 @@ document.addEventListener('DOMContentLoaded', function() {
       // Set button to loading state
       setButtonLoading(modifyButton, true);
       
-      // First get the API key from background script
-      chrome.runtime.sendMessage({action: 'getApiKey'}, function(apiKey) {
-        chrome.tabs.query({ active: true, currentWindow: true }, function(tabs) {
-          if (tabs && tabs[0]) {
-            chrome.tabs.sendMessage(tabs[0].id, { 
-              action: 'modifyPage', 
-              prompt: prompt,
-              apiKey: apiKey // Pass the API key from background
-            }, function(response) {
-              // Reset loading state
-              setButtonLoading(modifyButton, false);
-              
-              if (chrome.runtime.lastError) {
-                showStatus(`Error: ${chrome.runtime.lastError.message}`, false, 'modify');
-                return;
-              }
-              
-              if (response && response.success) {
-                // Save the successful prompt to history
-                savePromptToHistory(prompt);
-                showStatus('Page modification in progress...', false, 'modify');
-              } else if (response && response.error) {
-                showStatus(`Error: ${response.error}`, false, 'modify');
-              }
-            });
-          } else {
+      chrome.tabs.query({ active: true, currentWindow: true }, function(tabs) {
+        if (tabs && tabs[0]) {
+          chrome.tabs.sendMessage(tabs[0].id, { 
+            action: 'modifyPage', 
+            prompt: prompt 
+          }, function(response) {
+            // Reset loading state
             setButtonLoading(modifyButton, false);
-            showStatus('No active tab found', false, 'modify');
-          }
-        });
+            
+            if (chrome.runtime.lastError) {
+              showStatus(`Error: ${chrome.runtime.lastError.message}`, false, 'modify');
+              return;
+            }
+            
+            if (response && response.success) {
+              // Save the successful prompt to history
+              savePromptToHistory(prompt);
+              showStatus('Page modification in progress...', false, 'modify');
+            } else if (response && response.error) {
+              showStatus(`Error: ${response.error}`, false, 'modify');
+            }
+          });
+        } else {
+          setButtonLoading(modifyButton, false);
+          showStatus('No active tab found', false, 'modify');
+        }
       });
     });
   }
   
-  if (askButton) {
+  // Add this function to handle the Ask button click
+  function setupAskButton() {
+    const askButton = document.getElementById('askButton');
+    const userQuestion = document.getElementById('userQuestion');
+    const answerContainer = document.querySelector('.answer-container');
+    const answerText = document.querySelector('.answer-text');
+    
+    if (!askButton || !userQuestion) {
+      console.error('Ask button or question input not found');
+      return;
+    }
+    
     askButton.addEventListener('click', function() {
-      const question = document.getElementById('userQuestion').value.trim();
+      const question = userQuestion.value.trim();
       if (!question) {
-        showStatus('Please enter a question about the page.', false, 'ask');
+        showStatus('Please enter a question', false, 'ask');
         return;
       }
+      
+      // Save to history
+      savePromptToHistory(question, 'question');
       
       // Set button to loading state
       setButtonLoading(askButton, true);
       
-      // First get the API key from background script
-      chrome.runtime.sendMessage({action: 'getApiKey'}, function(apiKey) {
-        chrome.tabs.query({ active: true, currentWindow: true }, function(tabs) {
-          if (tabs && tabs[0]) {
-            chrome.tabs.sendMessage(tabs[0].id, { 
-              action: 'askQuestion', 
-              question: question,
-              apiKey: apiKey // Pass the API key from background
-            }, function(response) {
-              // Reset loading state
-              setButtonLoading(askButton, false);
-              
-              if (chrome.runtime.lastError) {
-                showStatus(`Error: ${chrome.runtime.lastError.message}`, false, 'ask');
-                return;
-              }
-              
-              if (response && response.success) {
-                showStatus('Processing your question...', false, 'ask');
-                
-                // If there's an answer in the response, display it
-                if (response.answer) {
-                  const answerContainer = document.querySelector('.answer-container');
-                  const answerText = document.querySelector('.answer-text');
-                  
-                  if (answerContainer && answerText) {
-                    answerText.textContent = response.answer;
-                    answerContainer.style.display = 'block';
-                  }
-                }
-              } else if (response && response.error) {
-                showStatus(`Error: ${response.error}`, false, 'ask');
-              }
-            });
-          } else {
+      // Hide previous answer if any
+      if (answerContainer) {
+        answerContainer.style.display = 'none';
+      }
+      
+      // Show status
+      showStatus('Asking question...', false, 'ask');
+      
+      // Send message to content script
+      chrome.tabs.query({ active: true, currentWindow: true }, function(tabs) {
+        if (tabs && tabs[0]) {
+          chrome.tabs.sendMessage(tabs[0].id, { 
+            action: 'askQuestion', 
+            question: question 
+          }, function(response) {
+            // Reset loading state
             setButtonLoading(askButton, false);
-            showStatus('No active tab found', false, 'ask');
-          }
-        });
+            
+            if (chrome.runtime.lastError) {
+              console.error('Error sending message:', chrome.runtime.lastError);
+              showStatus(`Error: ${chrome.runtime.lastError.message}`, false, 'ask');
+              return;
+            }
+            
+            if (response && response.success) {
+              // If we got a direct answer
+              if (response.answer) {
+                hideStatus('ask');
+                if (answerContainer && answerText) {
+                  answerText.textContent = response.answer;
+                  answerContainer.style.display = 'block';
+                }
+              } else {
+                showStatus('Processing your question...', false, 'ask');
+              }
+            } else if (response && response.error) {
+              showStatus(`Error: ${response.error}`, false, 'ask');
+            } else {
+              showStatus('No response from the page. Please try again.', false, 'ask');
+            }
+          });
+        } else {
+          setButtonLoading(askButton, false);
+          showStatus('No active tab found', false, 'ask');
+        }
       });
     });
   }
@@ -451,30 +473,51 @@ document.addEventListener('DOMContentLoaded', function() {
     if (request.action === 'microphonePermissionGranted') {
       console.log('[popup.js] Microphone permission granted');
       // Permission was granted, retry speech recognition
-      if (currentTextarea && currentMicButton && speechManager) {
-        speechManager.start(currentTextarea, currentMicButton);
+      if (window.currentTextarea && window.currentMicButton && speechManager) {
+        speechManager.start(window.currentTextarea, window.currentMicButton);
       }
     } else if (request.action === 'microphonePermissionDenied') {
       console.log('[popup.js] Microphone permission denied');
       // Permission was denied
-      const tabId = currentTextarea && currentTextarea.id === 'userPrompt' ? 'modify' : 'ask';
+      const tabId = window.currentTextarea && window.currentTextarea.id === 'userPrompt' ? 'modify' : 'ask';
       showStatus(`Microphone permission denied: ${request.error || 'Access not allowed'}`, false, tabId);
       
-      if (currentMicButton) {
-        currentMicButton.classList.add('permission-denied');
+      if (window.currentMicButton) {
+        window.currentMicButton.classList.add('permission-denied');
       }
     } else if (request.action === 'microphonePermissionDismissed') {
       console.log('[popup.js] Microphone permission banner dismissed');
       // User dismissed the banner
-      const tabId = currentTextarea && currentTextarea.id === 'userPrompt' ? 'modify' : 'ask';
+      const tabId = window.currentTextarea && window.currentTextarea.id === 'userPrompt' ? 'modify' : 'ask';
       showStatus('Microphone access is required for speech recognition', false, tabId);
     }
   });
+});
 
-  const grantMicPermissionButton = document.getElementById('grantMicPermissionButton');
-  if (grantMicPermissionButton) {
-    grantMicPermissionButton.addEventListener('click', function() {
-      chrome.tabs.create({ url: chrome.runtime.getURL('test.html') });
+// Function to handle API key management
+function setupApiKeyManager() {
+  const geminiKeyInput = document.getElementById('geminiApiKey');
+  const saveGeminiButton = document.getElementById('saveGeminiKey');
+  
+  if (!geminiKeyInput || !saveGeminiButton) return;
+  
+  // Load existing API key from storage
+  chrome.storage.local.get(['geminiApiKey'], function(result) {
+    if (result.geminiApiKey && geminiKeyInput) {
+      geminiKeyInput.value = result.geminiApiKey;
+    }
+  });
+  
+  // Set up save button for Gemini API key
+  saveGeminiButton.addEventListener('click', function() {
+    const apiKey = geminiKeyInput.value.trim();
+    if (!apiKey) {
+      showStatus('Please enter a Gemini API key', false, 'settings');
+      return;
+    }
+    
+    chrome.storage.local.set({ geminiApiKey: apiKey }, function() {
+      showStatus('Gemini API key saved successfully', false, 'settings');
     });
-  }
-}); 
+  });
+} 

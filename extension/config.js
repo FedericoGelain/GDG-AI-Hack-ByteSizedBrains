@@ -11,18 +11,10 @@ const config = {
 async function getApiKey() {
   try {
     // Try to get the API key from Chrome storage
-    const result = await chrome.storage.sync.get('apiKey');
-    if (result.apiKey) {
-      console.log('Using API key from storage');
-      return result.apiKey;
-    }
-    
-    // If not in storage, try to load from .env
-    const envKey = await loadApiKey();
-    if (envKey) {
-      // Save to storage for future use
-      await chrome.storage.sync.set({apiKey: envKey});
-      return envKey;
+    const result = await chrome.storage.local.get('geminiApiKey');
+    if (result.geminiApiKey) {
+      console.log('Using Gemini API key from storage');
+      return result.geminiApiKey;
     }
     
     // Fall back to the hardcoded key in config
@@ -38,7 +30,7 @@ async function getApiKey() {
 async function setApiKey(newKey) {
   try {
     // Update in storage
-    await chrome.storage.sync.set({apiKey: newKey});
+    await chrome.storage.local.set({geminiApiKey: newKey});
     // Update in memory
     config.API_KEY = newKey;
     console.log('API key updated successfully');
@@ -96,27 +88,27 @@ window.loadOpenAIApiKey = loadOpenAIApiKey;
 // Simple function to get the API key from storage
 window.getApiKey = function() {
   return new Promise((resolve) => {
-    chrome.storage.sync.get('apiKey', function(result) {
-      resolve(result.apiKey || '');
+    chrome.storage.local.get('geminiApiKey', function(result) {
+      resolve(result.geminiApiKey || '');
     });
   });
 };
 
 // Initialize the API key input field if it exists
 document.addEventListener('DOMContentLoaded', function() {
-  const apiKeyInput = document.getElementById('apiKey');
+  const apiKeyInput = document.getElementById('geminiApiKey');
   if (apiKeyInput) {
     // Load the saved API key
-    chrome.storage.sync.get('apiKey', function(result) {
-      if (result.apiKey) {
-        apiKeyInput.value = result.apiKey;
+    chrome.storage.local.get('geminiApiKey', function(result) {
+      if (result.geminiApiKey) {
+        apiKeyInput.value = result.geminiApiKey;
       }
     });
     
     // Save the API key when it changes
     apiKeyInput.addEventListener('change', function() {
       const apiKey = apiKeyInput.value.trim();
-      chrome.storage.sync.set({ apiKey: apiKey }, function() {
+      chrome.storage.local.set({ geminiApiKey: apiKey }, function() {
         console.log('API key saved');
       });
     });

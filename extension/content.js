@@ -131,34 +131,49 @@ async function processAudioAndGetTranscript() {
 chrome.runtime.onMessage.addListener(function(request, sender, sendResponse) {
   console.log('[content.js] Message received:', request);
   
-  // Handle different actions
   if (request.action === 'modifyPage') {
-    console.log('Received modify page request with prompt:', request.prompt);
-    modifyPageWithAI(request.prompt, request.apiKey)
-      .then(result => {
-        console.log('Page modification successful');
-        // Apply the HTML to the current page
-        applyHtmlToCurrentPage(result);
+    // Handle page modification request
+    modifyPageWithAI(request.prompt)
+      .then(html => {
+        // Replace the page content with the modified HTML
+        document.documentElement.innerHTML = html;
         sendResponse({ success: true });
       })
       .catch(error => {
-        console.error('Page modification failed:', error);
+        console.error('Error modifying page:', error);
         sendResponse({ success: false, error: error.message });
       });
     return true; // Keep the message channel open for async response
-  } else if (request.action === 'askQuestion') {
-    console.log('Received ask question request:', request.question);
-    askQuestionAboutPage(request.question, request.apiKey)
+  }
+  
+  if (request.action === 'askQuestion') {
+    console.log('[content.js] Processing question:', request.question);
+    
+    // Send an immediate response to acknowledge receipt
+    sendResponse({ success: true });
+    
+    // Process the question
+    askQuestionAboutPage(request.question)
       .then(answer => {
-        console.log('Question answered successfully');
-        sendResponse({ success: true, answer: answer });
+        console.log('[content.js] Got answer:', answer);
+        // Send the answer back to the popup
+        chrome.runtime.sendMessage({
+          action: 'questionAnswered',
+          answer: answer
+        });
       })
       .catch(error => {
-        console.error('Question answering failed:', error);
-        sendResponse({ success: false, error: error.message });
+        console.error('[content.js] Error answering question:', error);
+        chrome.runtime.sendMessage({
+          action: 'questionError',
+          error: error.message
+        });
       });
-    return true; // Keep the message channel open for async response
-  } else if (request.action === 'requestMicrophonePermission') {
+    
+    return true; // Keep the message channel open
+  }
+  
+  if (request.action === 'requestMicrophonePermission') {
     console.log('[content.js] Showing microphone permission banner');
     
     // Show the permission banner and handle the promise
@@ -204,6 +219,30 @@ chrome.runtime.onMessage.addListener(function(request, sender, sendResponse) {
   return true;
 });
 
+// Add a listener for the question answer in the popup
+chrome.runtime.onMessage.addListener(function(request, sender, sendResponse) {
+  if (request.action === 'questionAnswered') {
+    // Display the answer in the popup
+    const answerContainer = document.querySelector('.answer-container');
+    const answerText = document.querySelector('.answer-text');
+    const askStatusMessage = document.getElementById('askStatusMessage');
+    
+    if (answerContainer && answerText) {
+      answerText.textContent = request.answer;
+      answerContainer.style.display = 'block';
+      
+      if (askStatusMessage) {
+        askStatusMessage.style.display = 'none';
+      }
+    }
+  }
+  
+  if (request.action === 'questionError') {
+    // Display the error in the popup
+    showStatus(`Error: ${request.error}`, false, 'ask');
+  }
+});
+
 // Function to apply the generated HTML to the current page
 function applyHtmlToCurrentPage(htmlContent) {
   try {
@@ -235,14 +274,23 @@ async function modifyPageWithAI(prompt, apiKey) {
   try {
     console.log('Starting page modification with prompt:', prompt);
     
-    // If no API key was provided, try to get it from config
+    // If no API key was provided, try to get it from storage
     if (!apiKey) {
       try {
-        apiKey = await chrome.runtime.sendMessage({action: 'getApiKey'});
-        console.log('Got API key from background script');
+        // Get API keys from background script
+        const response = await chrome.runtime.sendMessage({action: 'getApiKeys'});
+        console.log('Got API keys from background script:', response);
+        
+        if (response && response.geminiApiKey) {
+          apiKey = response.geminiApiKey;
+          console.log('Using Gemini API key from storage');
+        } else {
+          console.error('No Gemini API key found in storage');
+          throw new Error('No API key found. Please add your Gemini API key in the extension settings.');
+        }
       } catch (error) {
         console.error('Failed to get API key:', error);
-        throw new Error('No API key provided. Please enter an API key in the extension popup.');
+        throw new Error('No API key provided. Please enter an API key in the extension settings.');
       }
     }
     
@@ -518,14 +566,23 @@ async function askQuestionAboutPage(question, apiKey) {
   try {
     console.log('Starting question answering with question:', question);
     
-    // If no API key was provided, try to get it from config
+    // If no API key was provided, try to get it from storage
     if (!apiKey) {
       try {
-        apiKey = await chrome.runtime.sendMessage({action: 'getApiKey'});
-        console.log('Got API key from background script');
+        // Get API keys from background script
+        const response = await chrome.runtime.sendMessage({action: 'getApiKeys'});
+        console.log('Got API keys from background script:', response);
+        
+        if (response && response.geminiApiKey) {
+          apiKey = response.geminiApiKey;
+          console.log('Using Gemini API key from storage');
+        } else {
+          console.error('No Gemini API key found in storage');
+          throw new Error('No API key found. Please add your Gemini API key in the extension settings.');
+        }
       } catch (error) {
         console.error('Failed to get API key:', error);
-        throw new Error('No API key provided. Please enter an API key in the extension popup.');
+        throw new Error('No API key provided. Please enter an API key in the extension settings.');
       }
     }
     
